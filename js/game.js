@@ -23,10 +23,12 @@ const gGame={
     isOn:false,
     shownCount:0,
     markedCount:0,
-    secsPassed:0,
+    secsPassed:3,
     gameOver: false,
     lives:3,
     isHint:false,
+    isMegaHint: false,
+    megaHintArea: [],
 }
 
 
@@ -39,7 +41,14 @@ function onInit(){
     gGame.isOn=false
     gGame.gameOver=false
     gGame.lives=3
+    gGame.secsPassed=3
+    var elSpan=document.querySelector('.safeClick')
+    elSpan.innerText=gGame.secsPassed
     unHint()
+    var elBtn=document.querySelector('.megaHint')
+    elBtn.classList.remove('shine')
+    gGame.isMegaHint=false
+    gGame.megaHintArea=[]
     stopTimer()
     var elTimer=document.querySelector('.timer')
     elTimer.innerText=0.00
@@ -82,6 +91,8 @@ function updateMines(plusMinus){
     var elspan=document.querySelector('.updateMines')
     var counter=+elspan.innerText+plusMinus
     elspan.innerText=counter
+    gLevel.MINES+=plusMinus
+    console.log(gLevel.MINES)
 }
 
 function createCell(){
@@ -113,19 +124,7 @@ function renderBored(board){
 	elBoard.innerHTML = strHTML
 }
 
-function getClassName(position) {
-	const cellClass = `cell-${position.i}-${position.j}`
-    //console.log(cellClass,position)
-	return cellClass
-}
 
-
-
-function renderCell(location, value) {
-	const cellSelector = '.'+getClassName(location)
-	const elCell = document.querySelector(cellSelector)
-	elCell.innerHTML = value
-}
 
 function dark(elBtn){
 var elBody=document.querySelector('body')
@@ -171,7 +170,6 @@ var j=getRandomInt(0,gLevel.SIZE-1)
 while((idxi===i && idxj===j)||gBoard[i][j].isMine===true){
     var i=getRandomInt(0,gLevel.SIZE-1)
     var j=getRandomInt(0,gLevel.SIZE-1)
-    console.log(i,j)
 }
     return {i,j} 
 }
@@ -192,20 +190,22 @@ function onCellClicked(elcell,i,j){
         createMines(i,j)
         startTimer()
         gGame.isOn=true
+        open(elcell,i,j)
     }
     else if(gGame.isHint){
         pick(i,j)
+        gGame.isHint=false
         return
     }
-    if(gGame.gameOver===true || elcell.innerText===FLAG) return
-    open(elcell,i,j)
+    else if(gGame.isMegaHint) 
+    {
+        megaPick(i,j)
+        return
+    }
+    else if(gGame.gameOver===true || elcell.innerText===FLAG) return
+    else open(elcell,i,j)
 }   
 
-function renderCell(position, value){
-     var selector = getClassName(position)
-     var elToCell = document.querySelector('.' + selector)
-     elToCell.innerHTML = value
-}
 
 
 function setMinesNegsCount(rowIdx,colIdx,board){
@@ -223,17 +223,20 @@ for(var i = rowIdx - 1; i <= rowIdx + 1; i++){
 }}
 
 function open(elcell,i,j){
+    if(elcell.innerText===FLAG)  elcell.innerText=EMPTY
     elcell.classList.remove('closed')
-    if(gBoard[i][j].isMine===true) 
+    gBoard[i][j].isShown=true
+    if(gBoard[i][j].isMine) 
     { 
         elcell.innerText=MINE
         updateMines(-1)
         loseLife()
+        elcell.classList.add('shake')
     }
     else if(gBoard[i][j].mineAroundCount) elcell.innerText=gBoard[i][j].mineAroundCount
     else elcell.innerText=EMPTY
     gLevel.EMPTYCELLS--
-    if(!gLevel.EMPTYCELLS) youWon()
+    if(!gLevel.EMPTYCELLS && !gLevel.MINES && isFlag()) youWon()
     if(!elcell.innerText)  openNgs(gBoard,i,j)
 }
 
@@ -300,7 +303,7 @@ function onCellMarked(elCell,i,j) {
         gBoard[i][j].isMarked=true
         updateMines(-1)
         gLevel.EMPTYCELLS--
-        if(!gLevel.EMPTYCELLS) youWon()
+        if(!gLevel.EMPTYCELLS && !gLevel.MINES) youWon()
     }
     else if(elCell.innerText===FLAG)  
     {
@@ -309,6 +312,8 @@ function onCellMarked(elCell,i,j) {
         updateMines(1)
         gLevel.EMPTYCELLS++
     } 
+    if(!gLevel.EMPTYCELLS && !gLevel.MINES) youWon()
+
 }
 
 function loseLife(){
@@ -329,8 +334,9 @@ function hint(elHint){
     if(!gGame.isOn) {
         var elMsg=document.querySelector('.useHint')  
         elMsg.classList.remove('hide')
-        setTimeout(()  =>  {elMsg.classList.add('hide')},2000)
+        setTimeout(()  =>  {elMsg.classList.add('hide')},4000)
     }
+    else if(elHint.classList.contains('shine') || gGame.isHint) return  
     else{
     elHint.classList.add('shine')
     gGame.isHint=true
@@ -347,22 +353,144 @@ function unHint(){
     }
 }
 
-function pick(rowIdx,colIdx){/*
+function pick(rowIdx,colIdx){
     for(var i = rowIdx - 1; i <= rowIdx + 1; i++){
         if(i < 0 || i >= gBoard.length) continue
     
         for(var j = colIdx - 1; j <= colIdx + 1; j++){
             if(j < 0 || j >=gBoard[i].length) continue
 
-            if(gBoard[i][j].isMine===MINE) renderCell({i,j}, MINE)
+            if(gBoard[i][j].isMine===true) renderCell({i,j}, MINE)
             else if(gBoard[i][j].mineAroundCount) renderCell({i,j},gBoard[i][j].mineAroundCount)
             else renderCell({i,j},EMPTY)
-
+            var cellSelector = '.'+getClassName({i,j})
+	        var elCell = document.querySelector(cellSelector)
+            elCell.classList.add('shineBorders')
         }
     }
-*/
+    setTimeout(() =>{unPick(rowIdx,colIdx)},1000)
+}
+
+function unPick(rowIdx,colIdx)
+{
+    for(var i = rowIdx - 1; i <= rowIdx + 1; i++){
+        if(i < 0 || i >= gBoard.length) continue
+    
+        for(var j = colIdx - 1; j <= colIdx + 1; j++){
+            if(j < 0 || j >=gBoard[i].length) continue
+            if(gBoard[i][j].isMarked) renderCell({i,j}, FLAG)
+            else if(!gBoard[i][j].isShown) renderCell({i,j}, EMPTY)
+            var cellSelector = '.'+getClassName({i,j})
+	        var elCell = document.querySelector(cellSelector)
+            elCell.classList.remove('shineBorders')
+}
+    }}
+
+function isFlag(){
+    for (var i = 0; i < gBoard.length; i++) {
+        for (var j = 0; j < gBoard[i].length; j++) {
+            if(gBoard[i][j].isMarked) return true
+}
+    }return false
 }
 
 
+function safeClick(){
+    if(!gGame.secsPassed) return
+    if(!(gLevel.EMPTYCELLS-gLevel.MINES))  return
+    if(!gGame.isOn) {
+        var elMsg=document.querySelector('.useHint')
+        elMsg.classList.remove('hide')
+        setTimeout(() =>{elMsg.classList.add('hide')},3000)
+    return
+    }
+    var elSpan=document.querySelector('.safeClick')
+    var i=getRandomInt(0,gLevel.SIZE-1)
+    var j=getRandomInt(0,gLevel.SIZE-1)
+    const cellSelector = '.'+getClassName({i,j})
+	const elCell = document.querySelector(cellSelector)
+    console.log(i,j,(gBoard[i][j].isShown || gBoard[i][j].isMine))
+
+    while(gBoard[i][j].isShown || gBoard[i][j].isMine){
+        var i=getRandomInt(0,gLevel.SIZE-1)
+        var j=getRandomInt(0,gLevel.SIZE-1)
+    }
+    
+    elCell.classList.add('shineBorders')
+    setTimeout(() => {elCell.classList.remove('shineBorders')},3000)
+    gGame.secsPassed--
+    elSpan.innerText=gGame.secsPassed
+}
+
+function megaHint(elBtn)
+{
+    if(elBtn.classList.contains('shine')) return
+    if(!gGame.isOn)
+    {
+        if(!gGame.isOn) {
+            var elMsg=document.querySelector('.useHint')  
+            elMsg.classList.remove('hide')
+            setTimeout(()  =>  {elMsg.classList.add('hide')},4000)
+            return
+        }
+    }
+    else elBtn.classList.add('shine')
+    gGame.isMegaHint=true
+}
 
 
+function megaPick(i,j){
+    gGame.megaHintArea.push({i,j})
+    if(gGame.megaHintArea.length===2)
+        arangeArea(gGame.megaHintArea[0],gGame.megaHintArea[1])
+
+}
+
+
+function arangeArea(position1,position2){
+    var bigi,bigj,smalli,smallj
+    var i1=position1.i
+    var i2=position2.i
+    var j1=position1.j
+    var j2=position2.j
+
+    if(i1<i2){
+        bigi=i2
+        smalli=i1
+    }
+    else{
+        bigi=i1
+        smalli=i2
+    }
+    if(j1<j2){
+        bigj=j2
+        smallj=j1
+    }
+    else{
+        bigj=j1
+        smallj=j2
+    }
+    for(var i=smalli;i<=bigi;i++){
+        for(var j=smallj;j<=bigj;j++){
+            if(gBoard[i][j].isMine===true) renderCell({i,j}, MINE)
+            else if(gBoard[i][j].mineAroundCount) renderCell({i,j},gBoard[i][j].mineAroundCount)
+            else renderCell({i,j},EMPTY)
+            var cellSelector = '.'+getClassName({i,j})
+	        var elCell = document.querySelector(cellSelector)
+            elCell.classList.add('shineBorders')
+        }
+    }
+    setTimeout(() =>{unMegaPick({smalli,smallj},{bigi,bigj})},1000)
+}
+
+function unMegaPick({smalli,smallj},{bigi,bigj}){
+    for(var i=smalli;i<=bigi;i++){
+        for(var j=smallj;j<=bigj;j++){
+            if(gBoard[i][j].isMarked) renderCell({i,j}, FLAG)
+            else if(!gBoard[i][j].isShown) renderCell({i,j}, EMPTY)
+            var cellSelector = '.'+getClassName({i,j})
+	        var elCell = document.querySelector(cellSelector)
+            elCell.classList.remove('shineBorders')
+        }}
+        gGame.isMegaHint=false
+}
